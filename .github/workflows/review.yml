@@ -39,7 +39,7 @@ jobs:
           path: .claude-review
           sparse-checkout: prompts
 
-      # Pass 1: general review by a fresh agent.
+      # Pass 1: general review by a fresh agent. Writes its findings to a file, posts nothing.
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -52,19 +52,17 @@ jobs:
             Ignore the `.claude-review/` folder: it is not part of the PR.
 
             Focus on correctness bugs, security issues, and breaking changes.
-            Skip style nits a linter would catch. If the PR looks fine, say so briefly.
+            Skip style nits a linter would catch.
 
-            Post specific issues as inline comments on the relevant lines, then submit
-            your summary as a review, putting the flag first:
-              - blocking issues found: `gh pr review --request-changes <PR NUMBER> --body "..."`
-              - otherwise: `gh pr review --comment <PR NUMBER> --body "..."`
-            Never approve.
+            Don't post anything on the PR. Write your findings to `.claude-review/general.md`,
+            one per finding, each with `path:line` (a line of the new file), whether it is
+            blocking, and a short explanation. Nothing found: write `No findings.`
 
             ${{ inputs.extra_prompt }}
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review --comment:*),Bash(gh pr review --request-changes:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+            --allowedTools "Write,Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
 
-      # Pass 2: another fresh agent runs the ponytail over-engineering review once pass 1 is done.
+      # Pass 2: another fresh agent runs the ponytail review, then posts ONE review for both passes.
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -82,15 +80,24 @@ jobs:
 
             The change to review is this PR: `gh pr diff <PR NUMBER>`.
 
-            Another reviewer already reviewed this PR. Read their review with
-            `gh pr view <PR NUMBER> --json reviews` and don't repeat their findings.
+            Another reviewer already reviewed this PR: their findings are in `.claude-review/general.md`.
+            Don't repeat them in your own findings.
 
-            Post each finding that points at specific lines as an inline comment there, then submit
-            the full report as a review, putting the flag first:
-              - any "Must fix" finding: `gh pr review --request-changes <PR NUMBER> --body "..."`
-              - otherwise: `gh pr review --comment <PR NUMBER> --body "..."`
-            Never approve.
+            Then post a single review that holds both their findings and yours. Write it to
+            `.claude-review/review.json`:
+              {"event": "...", "body": "...", "comments": [{"path": "...", "line": N, "side": "RIGHT", "body": "..."}]}
+            - `event`: `REQUEST_CHANGES` if the other reviewer found a blocking issue or you have a
+              "Must fix" finding. Otherwise `APPROVE`, even with non-blocking notes.
+            - `comments`: one per finding that points at specific lines. `line` must be a line
+              of the new file that is inside the diff.
+            - `body`: your report, with the other reviewer's findings listed first under
+              `General review:`. Don't repeat in the body what an inline comment already says;
+              refer to it by its number.
+            Submit it with exactly:
+              `gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json`
+            If GitHub rejects the request, nothing was posted: fix `review.json` (move a finding
+            whose line it rejects into `body`) and submit again. Once a submit succeeds, stop.
 
             ${{ inputs.extra_prompt }}
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review --comment:*),Bash(gh pr review --request-changes:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+            --allowedTools "Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json),Read,Grep,Glob"
