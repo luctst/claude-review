@@ -26,13 +26,13 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: refs/pull/${{ github.event.issue.number }}/head
           fetch-depth: 1
 
       # The review method lives in this repo; a reusable workflow can't see its own files otherwise.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: luctst/claude-review
           ref: main
