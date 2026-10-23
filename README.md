@@ -32,9 +32,11 @@ Pass only this secret, not `secrets: inherit`: this workflow runs from `main` of
 
 Comment `/review` on a PR to run a review. Comment it again for a fresh one.
 
-Each `/review` runs two fresh agents, one after the other, each posting its own review:
-1. A general review: bugs, security, breaking changes.
-2. An over-engineering review following `prompts/ponytail-review.md` and `prompts/ponytail.md`. It skips what the first review already said.
+Each `/review` runs two fresh agents, one after the other, and posts one review:
+1. A general review: bugs, security, breaking changes. It posts nothing and hands its findings to the second agent.
+2. An over-engineering review following `prompts/ponytail-review.md` and `prompts/ponytail.md`. It skips what the first review already said, then posts one review with both: a summary plus inline comments.
+
+The review requests changes when either agent finds a blocking issue, and approves otherwise.
 
 Edit the prompts here and every repo picks up the change from `main`.
 
