@@ -16,11 +16,19 @@ on:
 
 jobs:
   review:
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
     uses: luctst/claude-review/.github/workflows/review.yml@main
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     # with:
     #   extra_prompt: "This repo is a Swift iOS app; check for main-thread UI updates."
 ```
+
+Pass only this secret, not `secrets: inherit`: this workflow runs from `main` of this repo, and inherit would give it every secret of your repo. The `permissions` block is needed when your repo's default workflow token is read-only.
 
 Comment `/review` on a PR to run a review. Comment it again for a fresh one.
 
