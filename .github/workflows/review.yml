@@ -1,0 +1,96 @@
+name: Claude PR review
+
+on:
+  workflow_call:
+    inputs:
+      extra_prompt:
+        description: Repo-specific review instructions appended to the base prompt
+        type: string
+        default: ""
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+
+jobs:
+  review:
+    # Only a "/review" comment on a PR, from someone with write access (comments cost API credits).
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/review') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 1
+
+      # The review method lives in this repo; a reusable workflow can't see its own files otherwise.
+      - uses: actions/checkout@v4
+        with:
+          repository: luctst/claude-review
+          ref: main
+          path: .claude-review
+          sparse-checkout: prompts
+
+      # Pass 1: general review by a fresh agent.
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.issue.number }}
+
+            You are reviewing this pull request with no prior context. Read the diff
+            (`gh pr diff <PR NUMBER>`) and any files you need to understand it.
+            Ignore the `.claude-review/` folder: it is not part of the PR.
+
+            Focus on correctness bugs, security issues, and breaking changes.
+            Skip style nits a linter would catch. If the PR looks fine, say so briefly.
+
+            Post specific issues as inline comments on the relevant lines, then submit
+            your summary as a review, putting the flag first:
+              - blocking issues found: `gh pr review --request-changes <PR NUMBER> --body "..."`
+              - otherwise: `gh pr review --comment <PR NUMBER> --body "..."`
+            Never approve.
+
+            ${{ inputs.extra_prompt }}
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review --comment:*),Bash(gh pr review --request-changes:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+
+      # Pass 2: another fresh agent runs the ponytail over-engineering review once pass 1 is done.
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.issue.number }}
+
+            You are reviewing this pull request with no prior context.
+
+            First read these two files, which are not part of the PR:
+              - `.claude-review/prompts/ponytail-review.md`: your review method and report format. Follow it.
+              - `.claude-review/prompts/ponytail.md`: the "lazy senior dev" standard. Use it to judge
+                whether the PR is over-engineered. Its rules for writing code and its reply ending don't apply.
+            Ignore the `.claude-review/` folder in every other way.
+
+            The change to review is this PR: `gh pr diff <PR NUMBER>`.
+
+            Another reviewer already reviewed this PR. Read their review with
+            `gh pr view <PR NUMBER> --json reviews` and don't repeat their findings.
+
+            Post each finding that points at specific lines as an inline comment there, then submit
+            the full report as a review, putting the flag first:
+              - any "Must fix" finding: `gh pr review --request-changes <PR NUMBER> --body "..."`
+              - otherwise: `gh pr review --comment <PR NUMBER> --body "..."`
+            Never approve.
+
+            ${{ inputs.extra_prompt }}
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review --comment:*),Bash(gh pr review --request-changes:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
