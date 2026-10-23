@@ -4,7 +4,8 @@ Reusable workflow that runs a fresh Claude agent to review a PR when someone wit
 
 ## Use it in a repo
 
-1. Add an `ANTHROPIC_API_KEY` secret to the repo (or org).
+1. Run `claude setup-token` locally (needs a Claude Pro/Max account) and add the token as a `CLAUDE_CODE_OAUTH_TOKEN` secret to the repo:
+   `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>`
 2. Add `.github/workflows/claude-review.yml`:
 
 ```yaml
