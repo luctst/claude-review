@@ -63,7 +63,8 @@ jobs:
             --allowedTools "Write,Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
 
       # Pass 2: another fresh agent runs the ponytail review, then posts ONE review for both passes.
-      - uses: anthropics/claude-code-action@v1
+      - id: pass2
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -101,3 +102,17 @@ jobs:
             ${{ inputs.extra_prompt }}
           claude_args: |
             --allowedTools "Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json),Read,Grep,Glob"
+
+      # The action hides Claude's transcript and stays green when Claude stops without posting.
+      # shortcut: a review from another /review run on the same PR in the meantime also counts; count reviews before pass 2 if runs overlap.
+      - name: Check a review was posted
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.pass2.outputs.execution_file }}
+          SINCE: ${{ github.event.comment.created_at }}
+        run: |
+          [ -f "$EXECUTION_FILE" ] && jq '.[] | select(.type == "result") | {result, permission_denials}' "$EXECUTION_FILE"
+          gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews" --paginate \
+            | jq -e --arg since "$SINCE" '.[] | select(.user.login == "claude[bot]" and .submitted_at > $since)' > /dev/null \
+            || { echo "::error::Claude finished without posting a review"; exit 1; }
