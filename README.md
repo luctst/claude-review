@@ -32,6 +32,8 @@ Pass only this secret, not `secrets: inherit`: this workflow runs from `main` of
 
 Comment `/review` on a PR to run a review. Comment it again for a fresh one.
 
+If a run ends without posting a review, it fails. The log of its `Check a review was posted` step shows Claude's last message and the commands it wasn't allowed to run.
+
 Each `/review` runs two fresh agents, one after the other, and posts one review:
 1. A general review: bugs, security, breaking changes. It posts nothing and hands its findings to the second agent.
 2. An over-engineering review following `prompts/ponytail-review.md` and `prompts/ponytail.md`. It skips what the first review already said, then posts one review with both: a summary plus inline comments.
