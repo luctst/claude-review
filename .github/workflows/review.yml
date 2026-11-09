@@ -85,7 +85,7 @@ jobs:
             Don't repeat them in your own findings.
 
             Then post a single review that holds both their findings and yours. Write it to
-            `.claude-review/review.json`:
+            `.claude-review/review.json` with the Write tool:
               {"event": "...", "body": "...", "comments": [{"path": "...", "line": N, "side": "RIGHT", "body": "..."}]}
             - `event`: `REQUEST_CHANGES` if the other reviewer found a blocking issue or you have a
               "Must fix" finding. Otherwise `APPROVE`, even with non-blocking notes.
@@ -94,14 +94,15 @@ jobs:
             - `body`: your report, with the other reviewer's findings listed first under
               `General review:`. Don't repeat in the body what an inline comment already says;
               refer to it by its number.
-            Submit it with exactly:
-              `gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json`
+            Then submit it by running this command on its own, exactly as written. Any other form
+            (a heredoc, pipe, redirect or `&&`) is denied; if it is denied, run it again as written:
+              `gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json --jq .html_url`
             If GitHub rejects the request, nothing was posted: fix `review.json` (move a finding
             whose line it rejects into `body`) and submit again. Once a submit succeeds, stop.
 
             ${{ inputs.extra_prompt }}
           claude_args: |
-            --allowedTools "Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json),Read,Grep,Glob"
+            --allowedTools "Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews --input .claude-review/review.json --jq .html_url),Read,Grep,Glob"
 
       # The action hides Claude's transcript and stays green when Claude stops without posting.
       # shortcut: a review from another /review run on the same PR in the meantime also counts; count reviews before pass 2 if runs overlap.
